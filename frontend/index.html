@@ -1,0 +1,185 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>AI字幕EXO生成ツール</title>
+  <link rel="stylesheet" href="/style.css">
+</head>
+<body>
+  <main class="shell">
+    <header class="hero">
+      <p class="eyebrow">AI Subtitle EXO Generator</p>
+      <h1>話者別音声から AviUtl 字幕 EXO を生成</h1>
+      <p class="lede">話者ごとの音声、サンプル EXO、字幕ルールを登録し、確認しながら `.exo` `.srt` `.json` をまとめて出力します。</p>
+    </header>
+
+    <section class="panel">
+      <div class="section-head">
+        <h2>1. プロジェクト設定</h2>
+        <div class="inline-actions">
+          <button id="createProjectButton" class="primary" type="button">プロジェクト作成</button>
+          <button id="saveProjectButton" class="ghost" type="button">プロジェクト保存</button>
+        </div>
+      </div>
+      <form id="projectForm" class="grid">
+        <label>
+          <span>プロジェクト名</span>
+          <input name="name" value="subtitle_project" required>
+        </label>
+        <label>
+          <span>fps</span>
+          <input name="fps" type="number" value="60" min="1" max="240" required>
+        </label>
+        <label>
+          <span>幅</span>
+          <input name="width" type="number" value="1920" min="1" required>
+        </label>
+        <label>
+          <span>高さ</span>
+          <input name="height" type="number" value="1080" min="1" required>
+        </label>
+        <label>
+          <span>出力ファイル名</span>
+          <input name="output_name" value="output" required>
+        </label>
+        <label>
+          <span>認識モード</span>
+          <select name="asr_model">
+            <option value="base">高速</option>
+            <option value="small" selected>標準</option>
+            <option value="medium">高精度</option>
+            <option value="tiny">最速</option>
+          </select>
+        </label>
+      </form>
+      <div class="grid">
+        <label>
+          <span>保存済みプロジェクト</span>
+          <select id="projectPicker">
+            <option value="">選択してください</option>
+          </select>
+        </label>
+        <div class="inline-actions">
+          <button id="reloadProjectsButton" class="ghost" type="button">一覧更新</button>
+          <button id="loadProjectButton" class="ghost" type="button">プロジェクト読込</button>
+        </div>
+      </div>
+      <p id="projectStatus" class="status">未作成</p>
+    </section>
+
+    <section class="panel">
+      <div class="section-head">
+        <h2>2. 話者設定</h2>
+        <div class="inline-actions">
+          <button id="addSpeakerButton" class="ghost" type="button">話者追加</button>
+          <button id="registerSpeakersButton" class="primary" type="button">話者を登録</button>
+        </div>
+      </div>
+      <div class="grid">
+        <label>
+          <span>話者プリセット</span>
+          <select id="presetPicker">
+            <option value="">選択してください</option>
+          </select>
+        </label>
+        <div class="inline-actions">
+          <button id="reloadPresetsButton" class="ghost" type="button">プリセット更新</button>
+          <button id="applyPresetButton" class="ghost" type="button">選択中カードへ反映</button>
+        </div>
+      </div>
+      <div id="speakerList" class="speaker-list"></div>
+    </section>
+
+    <section class="panel">
+      <div class="section-head">
+        <h2>3. 生成と確認</h2>
+        <div class="inline-actions">
+          <button id="transcribeButton" class="primary" type="button">文字起こし開始</button>
+          <button id="exportButton" class="primary" type="button">EXO / SRT / JSON 出力</button>
+        </div>
+      </div>
+      <div class="preview-toolbar">
+        <label>
+          <span>話者フィルタ</span>
+          <select id="speakerFilter">
+            <option value="">全話者</option>
+          </select>
+        </label>
+      </div>
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th>話者</th>
+              <th>開始</th>
+              <th>終了</th>
+              <th>本文</th>
+              <th>警告</th>
+            </tr>
+          </thead>
+          <tbody id="segmentTableBody"></tbody>
+        </table>
+      </div>
+      <p id="generationStatus" class="status">未実行</p>
+    </section>
+  </main>
+
+  <template id="speakerTemplate">
+    <article class="speaker-card">
+      <div class="speaker-header">
+        <h3>話者設定</h3>
+        <button class="ghost danger remove-speaker" type="button">削除</button>
+      </div>
+      <div class="grid">
+        <label>
+          <span>話者名</span>
+          <input name="display_name" placeholder="話者A" required>
+        </label>
+        <label>
+          <span>プリセット名</span>
+          <input name="preset_name" placeholder="話者A標準">
+        </label>
+        <label>
+          <span>音声ファイル</span>
+          <input name="audio_file" type="file" accept=".wav,.mp3,.m4a,.aac,.flac,.ogg,.opus,.wma,.webm,.mp4" multiple required>
+        </label>
+        <label>
+          <span>サンプル EXO</span>
+          <input name="template_exo" type="file" accept=".exo" required>
+        </label>
+        <label>
+          <span>認識JSON</span>
+          <input name="transcript_json" type="file" accept=".json">
+        </label>
+        <label>
+          <span>最大文字数/行</span>
+          <input name="max_chars_per_line" type="number" value="18" min="1" max="80" required>
+        </label>
+        <label>
+          <span>最大行数</span>
+          <input name="max_lines" type="number" value="2" min="1" max="4" required>
+        </label>
+        <label>
+          <span>最短表示秒数</span>
+          <input name="min_duration_sec" type="number" value="0.8" min="0.1" step="0.1" required>
+        </label>
+        <label>
+          <span>最長表示秒数</span>
+          <input name="max_duration_sec" type="number" value="4.0" min="0.1" max="10.0" step="0.1" required>
+        </label>
+        <label>
+          <span>出力レイヤー</span>
+          <input name="base_layer" type="number" value="1" min="1" required>
+        </label>
+      </div>
+      <div class="inline-actions">
+        <button class="ghost save-preset" type="button">このカードをプリセット保存</button>
+      </div>
+      <p class="template-preview">テンプレート未検証</p>
+    </article>
+  </template>
+
+  <script src="/app.js"></script>
+</body>
+</html>
