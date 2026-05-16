@@ -82,6 +82,17 @@ def validate_speaker_payload(
     }
 
 
+def validate_v2_speaker_payload(display_name: str, subtitle_rule: dict, base_layer: object | None = None) -> dict:
+    display_name = display_name.strip()
+    if not display_name:
+        raise ValidationError("ERR-SPEAKER-001", "話者名は必須です。")
+    return {
+        "display_name": display_name,
+        "base_layer": _coerce_layer(base_layer),
+        "subtitle_rule": validate_subtitle_rule(subtitle_rule),
+    }
+
+
 def _coerce_int(value: object) -> int:
     try:
         return int(float(value))

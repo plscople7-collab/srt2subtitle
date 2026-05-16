@@ -72,3 +72,27 @@ backend/
 data/
   projects/
 ```
+
+## v0.2 draft path
+
+- alpha route: `http://127.0.0.1:8000/`
+- v0.2 route: `http://127.0.0.1:8000/v2`
+
+`/v2` is the new SRT based conversion path. It does not run speech recognition.
+Provide one `.srt` and one template `.exo` for each speaker, then export merged `.exo`, `.srt`, and `.json`.
+
+### v2 local project bundle
+
+In `/v2`, you can save the current project as one `.project.json` file.
+This bundle includes:
+
+- project settings
+- per-speaker subtitle rules
+- per-speaker SRT
+- per-speaker template EXO
+
+You can load the saved `.project.json` later and run the conversion again without reselecting the source files.
+
+### v2 sample files
+
+Sample SRT files for `/v2` are under [`samples/`](C:\Users\kinok\OneDrive\ドキュメント\プログラミング_code\字幕生成\samples).

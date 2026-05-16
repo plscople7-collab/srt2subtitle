@@ -76,6 +76,13 @@ h1 {
   backdrop-filter: blur(10px);
 }
 
+.inset-panel {
+  margin-top: 0;
+  padding: 16px 18px;
+  background: rgba(255, 250, 242, 0.7);
+  box-shadow: none;
+}
+
 .section-head,
 .speaker-header,
 .inline-actions {
@@ -158,6 +165,13 @@ button:disabled {
   color: var(--danger);
 }
 
+.link-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  text-decoration: none;
+}
+
 .speaker-list {
   display: grid;
   gap: 16px;
@@ -175,6 +189,20 @@ button:disabled {
   margin: 14px 0 0;
   color: var(--muted);
   white-space: pre-wrap;
+}
+
+.status-list {
+  margin: 10px 0 0;
+  padding-left: 20px;
+  color: var(--muted);
+}
+
+.preview-frame {
+  width: 100%;
+  min-height: 520px;
+  border: 1px solid rgba(217, 200, 177, 0.9);
+  border-radius: 16px;
+  background: #fffaf2;
 }
 
 .preview-toolbar {

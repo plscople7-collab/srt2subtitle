@@ -15,6 +15,8 @@ from .exo_writer import assign_frames, build_exo, build_segments_json, build_srt
 from .preset_store import PresetStore
 from .project_store import ProjectStore
 from .subtitle_splitter import split_segments
+from .v2_converter import convert_srt_project
+from .v2_store import V2Store
 from .transcribe import CompositeTranscriber, SidecarJsonTranscriber, TranscriptionError, WhisperWorkerTranscriber
 from .validators import ValidationError, validate_project_payload, validate_speaker_payload
 
@@ -24,6 +26,7 @@ FRONTEND_DIR = ROOT_DIR / "frontend"
 DATA_DIR = ROOT_DIR / "data" / "projects"
 STORE = ProjectStore(DATA_DIR)
 PRESET_STORE = PresetStore(ROOT_DIR / "data" / "presets")
+V2_STORE = V2Store(ROOT_DIR / "data" / "v2")
 TRANSCRIBER = CompositeTranscriber(
     primary=WhisperWorkerTranscriber(),
     fallback=SidecarJsonTranscriber(),
@@ -39,14 +42,31 @@ class RequestHandler(BaseHTTPRequestHandler):
         if parsed.path == "/":
             self._serve_static("index.html")
             return
-        if parsed.path in {"/app.js", "/style.css"}:
+        if parsed.path in {"/v2", "/v2/"}:
+            self._serve_static("v2.html")
+            return
+        if parsed.path in {"/app.js", "/style.css", "/v2.js"}:
             self._serve_static(parsed.path.lstrip("/"))
             return
         if parsed.path == "/api/projects":
             self._send_json(HTTPStatus.OK, {"projects": STORE.list_projects()})
             return
+        if parsed.path == "/api/v2/projects":
+            self._send_json(HTTPStatus.OK, {"projects": V2_STORE.list_projects()})
+            return
+        if parsed.path == "/api/v2/presets":
+            self._send_json(HTTPStatus.OK, {"presets": V2_STORE.list_presets()})
+            return
         if parsed.path == "/api/presets/speakers":
             self._send_json(HTTPStatus.OK, {"presets": PRESET_STORE.list_presets()})
+            return
+        if parsed.path.startswith("/api/v2/projects/"):
+            project_id = parsed.path.rsplit("/", 1)[-1]
+            self._send_json(HTTPStatus.OK, V2_STORE.get_project(project_id))
+            return
+        if parsed.path.startswith("/api/v2/presets/"):
+            preset_id = parsed.path.rsplit("/", 1)[-1]
+            self._send_json(HTTPStatus.OK, V2_STORE.get_preset(preset_id))
             return
         if parsed.path.startswith("/api/project/"):
             project_id = parsed.path.rsplit("/", 1)[-1]
@@ -74,6 +94,18 @@ class RequestHandler(BaseHTTPRequestHandler):
                 return
             if parsed.path == "/api/export/exo":
                 self._handle_export()
+                return
+            if parsed.path == "/api/v2/projects":
+                self._handle_v2_save_project()
+                return
+            if parsed.path == "/api/v2/presets":
+                self._handle_v2_save_preset()
+                return
+            if parsed.path == "/api/v2/template-preview":
+                self._handle_v2_template_preview()
+                return
+            if parsed.path == "/api/v2/convert":
+                self._handle_v2_convert()
                 return
             self._send_json(HTTPStatus.NOT_FOUND, {"error": "NOT_FOUND"})
         except ValidationError as exc:
@@ -258,6 +290,93 @@ class RequestHandler(BaseHTTPRequestHandler):
                 "exo_content_b64": base64.b64encode(exo_bytes).decode("ascii"),
                 "srt_content": srt_text,
                 "json_content": json_text,
+            },
+        )
+
+    def _handle_v2_convert(self) -> None:
+        content_type = self.headers.get("Content-Type", "")
+        body = self.rfile.read(int(self.headers.get("Content-Length", "0")))
+        form = self._parse_multipart(content_type, body)
+        project_payload = json.loads(_get_text_field(form, "project_json"))
+        speaker_count = int(_get_text_field(form, "speaker_count"))
+        speaker_specs: list[dict] = []
+        for index in range(speaker_count):
+            prefix = f"speaker_{index}_"
+            display_name = _get_text_field(form, prefix + "display_name")
+            subtitle_rule = json.loads(_get_text_field(form, prefix + "subtitle_rule_json"))
+            base_layer = _get_optional_text_field(form, prefix + "base_layer")
+            srt_parts = form.get(prefix + "srt_file", [])
+            template_parts = form.get(prefix + "template_exo", [])
+            if not srt_parts:
+                raise ValidationError("ERR-SRT-001", f"{display_name} の SRT がありません。")
+            if not template_parts:
+                raise ValidationError("ERR-SPEAKER-001", f"{display_name} のテンプレート EXO がありません。")
+            speaker_specs.append(
+                {
+                    "display_name": display_name,
+                    "subtitle_rule": subtitle_rule,
+                    "base_layer": base_layer,
+                    "srt_name": srt_parts[0]["filename"] or f"speaker_{index + 1}.srt",
+                    "srt_bytes": srt_parts[0]["content"],
+                    "template_name": template_parts[0]["filename"] or f"speaker_{index + 1}.exo",
+                    "template_bytes": template_parts[0]["content"],
+                }
+            )
+
+        result = convert_srt_project(project_payload, speaker_specs)
+        self._send_json(
+            HTTPStatus.OK,
+            {
+                "project": result["project"],
+                "segments": result["segments"],
+                "analysis": result["analysis"],
+                "exo_content_b64": base64.b64encode(result["exo_bytes"]).decode("ascii"),
+                "srt_content": result["srt_text"],
+                "json_content": result["json_text"],
+                "preview_html": result["preview_html"],
+            },
+        )
+
+    def _handle_v2_save_project(self) -> None:
+        payload = self._read_json()
+        saved = V2_STORE.save_project(payload, payload.get("project_id"))
+        self._send_json(HTTPStatus.OK, saved)
+
+    def _handle_v2_save_preset(self) -> None:
+        payload = self._read_json()
+        template_file = payload.get("template_exo", {})
+        if not template_file.get("content_b64"):
+            raise ValidationError("ERR-SPEAKER-001", "プリセット保存にはテンプレート EXO が必要です。")
+        template_bytes = base64.b64decode(template_file["content_b64"])
+        template_text, file_encoding = decode_exo_bytes(template_bytes)
+        template_meta = parse_exo_template(template_text, "pending", template_file.get("name", "template.exo"), file_encoding)
+        saved = V2_STORE.save_preset(
+            {
+                "name": str(payload.get("name", "")).strip() or "preset",
+                "subtitle_rule": payload.get("subtitle_rule", {}),
+                "base_layer": int(payload.get("base_layer") or 1),
+                "template_exo": template_file,
+                "template_preview_meta": template_meta.get("preview", {}),
+            },
+            payload.get("preset_id"),
+        )
+        self._send_json(HTTPStatus.OK, saved)
+
+    def _handle_v2_template_preview(self) -> None:
+        content_type = self.headers.get("Content-Type", "")
+        form = self._parse_multipart(content_type, self.rfile.read(int(self.headers.get("Content-Length", "0"))))
+        template_parts = form.get("template_exo", [])
+        if not template_parts:
+            raise ValidationError("ERR-SPEAKER-001", "テンプレート EXO がありません。")
+        template_name = template_parts[0]["filename"] or "template.exo"
+        template_bytes = template_parts[0]["content"]
+        template_text, file_encoding = decode_exo_bytes(template_bytes)
+        template_meta = parse_exo_template(template_text, "pending", template_name, file_encoding)
+        self._send_json(
+            HTTPStatus.OK,
+            {
+                "template_preview_meta": template_meta.get("preview", {}),
+                "file_encoding": file_encoding,
             },
         )
 
