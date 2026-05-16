@@ -7,14 +7,15 @@
 - 静的 UI を Cloudflare 上で配信する
 - `SRT + 話者別 EXO テンプレート -> EXO` の変換 API を Worker に載せる
 - プロジェクト / プリセットは D1 で共有する
-- テンプレートや将来の SRT 保管は R2 を前提にする
+- 初期運用は D1 のみで成立させる
+- R2 は必要になってから追加する
 
 ## 含めたもの
 
 - `wrangler.jsonc`: Workers Assets + API の構成
 - `schema.sql`: D1 の最小スキーマ
 - `src/index.ts`: Worker 入口
-- `src/lib/`: SRT / EXO / preview の純粋関数
+- `src/lib/`: SRT / preview の純粋関数
 - `public/index.html`: 最低限のルート確認ページ
 
 ## ローカル開発
@@ -33,13 +34,14 @@ npm run dev
 
 - GitHub 連携で `main` push 時に自動 deploy される
 - `/api/health` が返る
-- D1 / R2 binding が wrangler 設定に入る
+- D1 binding が wrangler 設定に入る
 
 GitHub 側では [.github/workflows/cloudflare-check.yml](C:\Users\kinok\OneDrive\ドキュメント\プログラミング_code\字幕生成\.github\workflows\cloudflare-check.yml) を追加してあり、`cloudflare/` 配下の TypeScript チェックが走るようにしています。
 
 ## 次の実装対象
 
 - 認証の追加
-- D1 / R2 の実 ID 反映
+- D1 の実 ID 反映
 - `frontend/v2` を Worker 配信用 UI へ移植
 - プロジェクト / プリセットの API 連携
+- R2 は必要になってから追加

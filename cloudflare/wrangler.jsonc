@@ -10,19 +10,12 @@
   },
   "observability": {
     "enabled": true
-  }
-  // Deploy time bindings:
-  // "d1_databases": [
-  //   {
-  //     "binding": "DB",
-  //     "database_name": "srt2subtitle",
-  //     "database_id": "REPLACE_ME"
-  //   }
-  // ],
-  // "r2_buckets": [
-  //   {
-  //     "binding": "ASSET_BUCKET",
-  //     "bucket_name": "srt2subtitle-assets"
-  //   }
-  // ]
+  },
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "srt2subtitle",
+      "database_id": "d54e6aeb-568e-4f3c-8594-51c83a6ea2b1"
+    }
+  ]
 }

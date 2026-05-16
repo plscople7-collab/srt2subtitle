@@ -6,6 +6,15 @@
 
 - Worker: [https://srt2subtitle-v02.plscople7.workers.dev/](https://srt2subtitle-v02.plscople7.workers.dev/)
 
+## 方針
+
+- 初期版は `D1 のみ` で進める
+- `R2 は使わない`
+- SRT / EXO / preview 用メタデータは D1 の `payload_json` に含める
+
+R2 は使用量課金サービスなので、支払方法設定が必要です。  
+今の v0.2 は小さいテキスト資産しか持たないので、まずは D1 のみで十分です。
+
 ## 1. GitHub 連携
 
 1. Cloudflare ダッシュボードを開く
@@ -23,7 +32,7 @@
 4. Worker name は `srt2subtitle-v02` に合わせる
 5. Branch はまず `main` を指定する
 
-この時点では D1 / R2 はまだ未設定でよいです。
+この時点では D1 はまだ未設定でよく、R2 は不要です。
 
 ## 3. 最初の deploy 確認
 
@@ -74,27 +83,7 @@ npx wrangler d1 execute srt2subtitle --remote --file=schema.sql
 ]
 ```
 
-## 7. R2 作成
-
-Cloudflare ダッシュボードで:
-
-1. `Storage & Databases`
-2. `R2`
-3. `Create bucket`
-4. Bucket name を `srt2subtitle-assets` にする
-
-その後 [wrangler.jsonc](C:\Users\kinok\OneDrive\ドキュメント\プログラミング_code\字幕生成\cloudflare\wrangler.jsonc) に以下を追加します。
-
-```jsonc
-"r2_buckets": [
-  {
-    "binding": "ASSET_BUCKET",
-    "bucket_name": "srt2subtitle-assets"
-  }
-]
-```
-
-## 8. 再 deploy
+## 7. 再 deploy
 
 `main` に push するだけでも再 deploy されます。
 
@@ -105,7 +94,7 @@ cd cloudflare
 npx wrangler deploy
 ```
 
-## 9. この段階で確認するもの
+## 8. この段階で確認するもの
 
 - `/api/health`
 - `/api/v2/projects`
@@ -113,7 +102,7 @@ npx wrangler deploy
 
 最初は空配列でよいです。
 
-## 10. まだ未完了の部分
+## 9. まだ未完了の部分
 
 この段階ではまだ以下は未移植です。
 
@@ -126,6 +115,21 @@ npx wrangler deploy
 
 - GitHub 連携
 - Worker 自動 deploy
-- D1 / R2 binding 接続
+- D1 binding 接続
 
 までです。
+
+## R2 を後回しにする理由
+
+今の v0.2 で扱うのは次のような小さいテキスト資産です。
+
+- プロジェクト JSON
+- 話者ごとの SRT
+- テンプレート EXO
+- preview 用メタデータ
+
+この規模なら D1 の `payload_json` に含めて問題ありません。  
+R2 を使うのは、次のどちらかが起きてからで十分です。
+
+- 資産サイズが大きくなり、D1 に内包しづらくなる
+- 件数や更新頻度が増えて、メタデータと本体を分けたくなる
