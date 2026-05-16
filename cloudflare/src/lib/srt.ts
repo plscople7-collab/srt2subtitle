@@ -2,6 +2,18 @@ import type { Segment } from "./types";
 
 const TIMECODE = /^\s*(\d{2}:\d{2}:\d{2}[,.]\d{3})\s*-->\s*(\d{2}:\d{2}:\d{2}[,.]\d{3})\s*$/;
 
+export function decodeSrtBytes(raw: Uint8Array): [string, string] {
+  for (const encoding of ["utf-8", "shift_jis"]) {
+    try {
+      const decoded = new TextDecoder(encoding, { fatal: true }).decode(raw);
+      return [stripBom(decoded), encoding === "shift_jis" ? "cp932" : encoding];
+    } catch {
+      continue;
+    }
+  }
+  throw new Error("ERR-SRT-ENCODING-001: SRT の文字コードを解釈できません。UTF-8 を推奨します。");
+}
+
 export function parseSrt(content: string, speakerId: string): Segment[] {
   const normalized = content.replace(/\r\n/g, "\n").replace(/\r/g, "\n").trim();
   if (!normalized) {
@@ -14,7 +26,7 @@ export function parseSrt(content: string, speakerId: string): Segment[] {
 function parseBlock(block: string, blockIndex: number, speakerId: string): Segment {
   const lines = block.split("\n").map((line) => line.trimEnd()).filter((line) => line.trim() !== "");
   if (lines.length < 2) {
-    throw new Error(`ERR-SRT-001: ${blockIndex} ブロックが不正です。`);
+    throw new Error(`ERR-SRT-001: SRT の ${blockIndex} ブロックが不正です。`);
   }
   let cursor = 0;
   if (/^\d+$/.test(lines[0] ?? "")) {
@@ -22,16 +34,16 @@ function parseBlock(block: string, blockIndex: number, speakerId: string): Segme
   }
   const match = TIMECODE.exec(lines[cursor] ?? "");
   if (!match) {
-    throw new Error(`ERR-SRT-001: ${blockIndex} ブロックのタイムコードが不正です。`);
+    throw new Error(`ERR-SRT-001: SRT の ${blockIndex} ブロックのタイムコードが不正です。`);
   }
   const textLines = lines.slice(cursor + 1);
   if (textLines.length === 0) {
-    throw new Error(`ERR-SRT-001: ${blockIndex} ブロックに本文がありません。`);
+    throw new Error(`ERR-SRT-001: SRT の ${blockIndex} ブロックに本文がありません。`);
   }
   const start_sec = parseTimecode(match[1]);
   const end_sec = parseTimecode(match[2]);
   if (start_sec >= end_sec) {
-    throw new Error(`ERR-SRT-001: ${blockIndex} ブロックで開始時刻と終了時刻が逆転しています。`);
+    throw new Error(`ERR-SRT-001: SRT の ${blockIndex} ブロックで開始時刻と終了時刻が逆転しています。`);
   }
   return {
     speaker_id: speakerId,
@@ -46,4 +58,8 @@ function parseBlock(block: string, blockIndex: number, speakerId: string): Segme
 function parseTimecode(value: string): number {
   const [h, m, s] = value.replace(",", ".").split(":");
   return Number(h) * 3600 + Number(m) * 60 + Number(s);
+}
+
+function stripBom(value: string): string {
+  return value.charCodeAt(0) === 0xfeff ? value.slice(1) : value;
 }

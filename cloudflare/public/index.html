@@ -3,12 +3,154 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>srt2subtitle Cloudflare v0.2</title>
+  <title>srt2subtitle v0.2</title>
+  <link rel="stylesheet" href="/style.css">
 </head>
 <body>
-  <main>
-    <h1>srt2subtitle Cloudflare v0.2</h1>
-    <p>Worker routing is active. API endpoints live under <code>/api/</code>.</p>
+  <main class="shell">
+    <header class="hero">
+      <p class="eyebrow">SRT to EXO Converter</p>
+      <h1>v0.2 Cloudflare Worker 版</h1>
+      <p class="lede">
+        音声認識はローカルに任せて、この画面では話者ごとの SRT と見本 EXO から AviUtl 用の EXO を生成します。
+        変換結果はその場で確認でき、EXO / SRT / JSON / preview.html をダウンロードできます。
+      </p>
+    </header>
+
+    <section class="panel">
+      <div class="section-head">
+        <h2>1. プロジェクト</h2>
+        <div class="inline-actions">
+          <button id="saveBundleButton" class="ghost" type="button">ローカル保存</button>
+          <button id="loadBundleButton" class="ghost" type="button">ローカル読込</button>
+          <input id="bundleFileInput" type="file" accept=".json" hidden>
+        </div>
+      </div>
+      <form id="projectForm" class="grid">
+        <label>
+          <span>プロジェクト名</span>
+          <input name="name" value="srt_project" required>
+        </label>
+        <label>
+          <span>fps</span>
+          <input name="fps" type="number" value="60" min="1" max="240" required>
+        </label>
+        <label>
+          <span>幅</span>
+          <input name="width" type="number" value="1920" min="1" required>
+        </label>
+        <label>
+          <span>高さ</span>
+          <input name="height" type="number" value="1080" min="1" required>
+        </label>
+        <label>
+          <span>出力ファイル名</span>
+          <input name="output_name" value="output_v2" required>
+        </label>
+      </form>
+      <p id="projectStatus" class="status">未保存</p>
+    </section>
+
+    <section class="panel">
+      <div class="section-head">
+        <h2>2. 話者ごとの SRT / EXO</h2>
+        <div class="inline-actions">
+          <button id="addSpeakerButton" class="ghost" type="button">話者を追加</button>
+          <button id="convertButton" class="primary" type="button">変換開始</button>
+        </div>
+      </div>
+      <div id="speakerList" class="speaker-list"></div>
+    </section>
+
+    <section class="panel">
+      <div class="section-head">
+        <h2>3. 変換結果</h2>
+        <div class="inline-actions">
+          <button id="downloadExoButton" class="ghost" type="button" disabled>EXO 保存</button>
+          <button id="downloadSrtButton" class="ghost" type="button" disabled>SRT 保存</button>
+          <button id="downloadJsonButton" class="ghost" type="button" disabled>JSON 保存</button>
+          <button id="downloadPreviewButton" class="ghost" type="button" disabled>preview.html 保存</button>
+        </div>
+      </div>
+      <div class="panel inset-panel">
+        <h3>変換チェック</h3>
+        <p id="analysisSummary" class="status">まだ変換していません。</p>
+        <ul id="analysisList" class="status-list"></ul>
+      </div>
+      <div class="panel inset-panel">
+        <h3>HTML プレビュー</h3>
+        <iframe id="previewFrame" class="preview-frame" title="preview"></iframe>
+      </div>
+      <div class="preview-toolbar">
+        <label>
+          <span>話者フィルタ</span>
+          <select id="speakerFilter">
+            <option value="">全話者</option>
+          </select>
+        </label>
+      </div>
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th>話者</th>
+              <th>開始</th>
+              <th>終了</th>
+              <th>本文</th>
+              <th>警告</th>
+            </tr>
+          </thead>
+          <tbody id="segmentTableBody"></tbody>
+        </table>
+      </div>
+      <p id="generationStatus" class="status">まだ変換していません。</p>
+    </section>
   </main>
+
+  <template id="speakerTemplate">
+    <article class="speaker-card">
+      <div class="speaker-header">
+        <h3>話者設定</h3>
+        <button class="ghost danger remove-speaker" type="button">削除</button>
+      </div>
+      <div class="grid">
+        <label>
+          <span>話者名</span>
+          <input name="display_name" placeholder="話者A" required>
+        </label>
+        <label>
+          <span>SRT</span>
+          <input name="srt_file" type="file" accept=".srt" required>
+        </label>
+        <label>
+          <span>見本 EXO</span>
+          <input name="template_exo" type="file" accept=".exo" required>
+        </label>
+        <label>
+          <span>最大文字数 / 行</span>
+          <input name="max_chars_per_line" type="number" value="18" min="1" max="80" required>
+        </label>
+        <label>
+          <span>最大行数</span>
+          <input name="max_lines" type="number" value="2" min="1" max="4" required>
+        </label>
+        <label>
+          <span>最短表示秒数</span>
+          <input name="min_duration_sec" type="number" value="0.8" min="0.1" step="0.1" required>
+        </label>
+        <label>
+          <span>最長表示秒数</span>
+          <input name="max_duration_sec" type="number" value="4.0" min="0.1" max="10" step="0.1" required>
+        </label>
+        <label>
+          <span>出力レイヤー</span>
+          <input name="base_layer" type="number" value="1" min="1" required>
+        </label>
+      </div>
+      <p class="template-preview speaker-source-status">未選択</p>
+    </article>
+  </template>
+
+  <script src="/app.js"></script>
 </body>
 </html>
