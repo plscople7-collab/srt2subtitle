@@ -88,6 +88,17 @@ class V2Store:
         self._write_json(preset_json, data)
         return data
 
+    def delete_preset(self, preset_id: str) -> None:
+        preset_dir = self.presets_dir / preset_id
+        preset_json = preset_dir / "preset.json"
+        if not preset_json.exists():
+            raise FileNotFoundError(preset_id)
+        preset_json.unlink()
+        try:
+            preset_dir.rmdir()
+        except OSError:
+            pass
+
     @staticmethod
     def _read_json(path: Path) -> dict:
         return json.loads(path.read_text(encoding="utf-8"))

@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from .exo_parser import decode_exo_bytes, parse_exo_template
 from .exo_writer import assign_frames, build_exo, build_segments_json, build_srt
-from .v2_preview import analyze_segments, build_preview_html
+from .v2_preview import analyze_segments
 from .srt_parser import decode_srt_bytes, parse_srt
 from .subtitle_splitter import split_segments
 from .validators import validate_project_payload, validate_v2_speaker_payload
@@ -11,6 +11,8 @@ from .validators import validate_project_payload, validate_v2_speaker_payload
 def convert_srt_project(project_payload: dict, speaker_specs: list[dict]) -> dict:
     if not speaker_specs:
         raise ValueError("speaker_specs must not be empty")
+
+    _normalize_speaker_layers(speaker_specs)
 
     project = {
         "schema_version": "0.2-draft",
@@ -67,7 +69,6 @@ def convert_srt_project(project_payload: dict, speaker_specs: list[dict]) -> dic
     srt_text = build_srt(framed_segments)
     json_text = build_segments_json(framed_segments)
     analysis = analyze_segments(project, framed_segments)
-    preview_html = build_preview_html(project, framed_segments, analysis)
     exo_encoding = project["speakers"][0]["template_meta"].get("file_encoding", "utf-8")
     exo_bytes = exo_text.encode(exo_encoding, errors="strict")
     return {
@@ -78,5 +79,19 @@ def convert_srt_project(project_payload: dict, speaker_specs: list[dict]) -> dic
         "exo_bytes": exo_bytes,
         "srt_text": srt_text,
         "json_text": json_text,
-        "preview_html": preview_html,
     }
+
+
+def _normalize_speaker_layers(speaker_specs: list[dict]) -> None:
+    used: set[int] = set()
+    for speaker_spec in speaker_specs:
+        try:
+            value = int(speaker_spec.get("base_layer") or 1)
+        except (TypeError, ValueError):
+            value = 1
+        if value < 1:
+            value = 1
+        while value in used:
+            value += 1
+        used.add(value)
+        speaker_spec["base_layer"] = value

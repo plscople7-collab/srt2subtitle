@@ -1,3 +1,4 @@
+// Mirror of frontend/v2.js for GitHub Pages static share
 const state = {
   apiBase: loadApiBase(),
   presets: [],
@@ -43,19 +44,19 @@ loadBundleButton.addEventListener("click", () => bundleFileInput.click());
 bundleFileInput.addEventListener("change", (event) => void loadProjectBundle(event));
 reloadPresetsButton.addEventListener("click", () => void loadPresets(true));
 speakerFilter.addEventListener("change", renderSegments);
-if (saveApiBaseButton) saveApiBaseButton.addEventListener("click", saveApiBase);
-if (checkApiButton) checkApiButton.addEventListener("click", () => void checkApiHealth());
+saveApiBaseButton.addEventListener("click", saveApiBase);
+checkApiButton.addEventListener("click", () => void checkApiHealth());
 downloadExoButton.addEventListener("click", () => downloadBase64(outputName("exo"), state.output.exoContentB64, "application/octet-stream"));
 downloadSrtButton.addEventListener("click", () => downloadText(outputName("srt"), state.output.srtContent));
 downloadJsonButton.addEventListener("click", () => downloadText(outputName("json"), state.output.jsonContent));
 
-if (apiBaseInput) apiBaseInput.value = state.apiBase;
+apiBaseInput.value = state.apiBase;
 addSpeakerCard();
 renderAnalysis();
 renderSegments();
 renderPresetTable();
 updateActiveSpeakerLabel();
-if (checkApiButton) void checkApiHealth();
+void checkApiHealth();
 void loadPresets(false);
 
 function addSpeakerCard(initialData = null) {
@@ -67,19 +68,13 @@ function addSpeakerCard(initialData = null) {
   const srtInput = card.querySelector('[name="srt_file"]');
   const templateInput = card.querySelector('[name="template_exo"]');
   const pickButtons = card.querySelectorAll(".pick-file");
-
   card.querySelector(".remove-speaker").addEventListener("click", () => {
-    if (state.activeSpeakerCard === card) {
-      state.activeSpeakerCard = null;
-    }
+    if (state.activeSpeakerCard === card) state.activeSpeakerCard = null;
     card.remove();
     normalizeSpeakerLayers();
     if (!speakerList.children.length) addSpeakerCard();
-    if (!state.activeSpeakerCard && speakerList.firstElementChild) {
-      setActiveSpeakerCard(speakerList.firstElementChild);
-    } else {
-      updateActiveSpeakerLabel();
-    }
+    if (!state.activeSpeakerCard && speakerList.firstElementChild) setActiveSpeakerCard(speakerList.firstElementChild);
+    else updateActiveSpeakerLabel();
   });
   card.addEventListener("click", () => setActiveSpeakerCard(card));
   card.querySelector(".save-preset").addEventListener("click", () => void savePresetFromCard(card));
@@ -96,16 +91,10 @@ function addSpeakerCard(initialData = null) {
       card.querySelector(`[name="${kind}"]`).click();
     });
   }
-
   bindDropField(card, "srt");
   bindDropField(card, "template");
-
-  if (initialData) {
-    hydrateSpeakerCard(card, initialData);
-  } else {
-    baseLayerInput.value = String(nextSuggestedLayer());
-  }
-
+  if (initialData) hydrateSpeakerCard(card, initialData);
+  else baseLayerInput.value = String(nextSuggestedLayer());
   renderPresetSelectOptions(card);
   refreshCardStatus(card);
   speakerList.appendChild(fragment);
@@ -126,22 +115,13 @@ async function convertProject() {
     const project = readProjectForm();
     const speakers = await Promise.all([...speakerList.querySelectorAll(".speaker-card")].map(buildSpeakerPayload));
     if (speakers.length === 0) throw new Error("話者を1人以上追加してください。");
-
-    const response = await fetchJson("/api/v2/convert", {
-      method: "POST",
-      body: buildConvertFormData(project, speakers),
-    });
-
+    const response = await fetchJson("/api/v2/convert", { method: "POST", body: buildConvertFormData(project, speakers) });
     state.segments = response.segments || [];
     state.analysis = response.analysis || null;
     state.output.exoContentB64 = response.exo_content_b64 || "";
     state.output.srtContent = response.srt_content || "";
     state.output.jsonContent = response.json_content || "";
-    state.speakers = (response.project?.speakers || []).map((speaker) => ({
-      speaker_id: speaker.speaker_id,
-      display_name: speaker.display_name,
-    }));
-
+    state.speakers = (response.project?.speakers || []).map((speaker) => ({ speaker_id: speaker.speaker_id, display_name: speaker.display_name }));
     generationStatus.textContent = `${state.segments.length} 件の字幕を生成しました。`;
     projectStatus.textContent = `変換済み: ${project.name}`;
     setDownloadDisabled(false);
@@ -162,8 +142,7 @@ async function saveProjectBundle() {
     normalizeSpeakerLayers();
     const project = readProjectForm();
     const speakers = (await Promise.all([...speakerList.querySelectorAll(".speaker-card")].map(serializeSpeakerCard))).filter(Boolean);
-    const bundle = { schema_version: "0.2-local-project", project, speakers };
-    downloadText(`${project.output_name || "output_v2"}.project.json`, JSON.stringify(bundle, null, 2));
+    downloadText(`${project.output_name || "output_v2"}.project.json`, JSON.stringify({ schema_version: "0.2-pages-project", project, speakers }, null, 2));
     projectStatus.textContent = `ローカル保存: ${project.name}`;
   } catch (error) {
     projectStatus.textContent = formatError(error, "ローカル保存に失敗しました。");
@@ -177,9 +156,8 @@ async function loadProjectBundle(event) {
   if (!file) return;
   try {
     setBusy(loadBundleButton, true);
-    const payload = JSON.parse(await file.text());
-    applyProjectBundle(payload);
-    projectStatus.textContent = `読込済み: ${payload.project?.name || file.name}`;
+    applyProjectBundle(JSON.parse(await file.text()));
+    projectStatus.textContent = `読込済み: ${file.name}`;
   } catch (error) {
     projectStatus.textContent = formatError(error, "ローカル読込に失敗しました。");
   } finally {
@@ -191,19 +169,11 @@ async function loadProjectBundle(event) {
 async function buildSpeakerPayload(card) {
   const displayName = card.querySelector('[name="display_name"]').value.trim();
   if (!displayName) throw new Error("話者名を入力してください。");
-
   const srtFile = await resolveCardFile(card, "srt");
   const templateFile = await resolveCardFile(card, "template");
   if (!srtFile) throw new Error(`${displayName} のSRTを指定してください。`);
   if (!templateFile) throw new Error(`${displayName} の見本EXOを指定してください。`);
-
-  return {
-    display_name: displayName,
-    base_layer: Number(card.querySelector('[name="base_layer"]').value),
-    subtitle_rule: readSubtitleRule(card),
-    srtFile,
-    templateFile,
-  };
+  return { display_name: displayName, base_layer: Number(card.querySelector('[name="base_layer"]').value), subtitle_rule: readSubtitleRule(card), srtFile, templateFile };
 }
 
 async function serializeSpeakerCard(card) {
@@ -211,9 +181,7 @@ async function serializeSpeakerCard(card) {
   const srtFile = await resolveCardFile(card, "srt");
   const templateFile = await resolveCardFile(card, "template");
   if (!displayName && !srtFile && !templateFile) return null;
-  if (!displayName || !srtFile || !templateFile) {
-    throw new Error("保存する話者には、話者名、SRT、見本EXOが必要です。");
-  }
+  if (!displayName || !srtFile || !templateFile) throw new Error("保存する話者には、話者名、SRT、見本EXOが必要です。");
   return {
     display_name: displayName,
     base_layer: Number(card.querySelector('[name="base_layer"]').value),
@@ -249,7 +217,6 @@ function applyProjectBundle(payload) {
   const speakers = (payload.speakers || []).filter(Boolean);
   for (const speaker of speakers) addSpeakerCard(speaker);
   if (speakers.length === 0) addSpeakerCard();
-
   state.speakers = [];
   state.segments = [];
   state.analysis = null;
@@ -278,13 +245,7 @@ function hydrateSpeakerCard(card, data) {
 
 function readProjectForm() {
   const payload = Object.fromEntries(new FormData(document.querySelector("#projectForm")).entries());
-  return {
-    name: String(payload.name || "srt_project"),
-    fps: Number(payload.fps || 60),
-    width: Number(payload.width || 1920),
-    height: Number(payload.height || 1080),
-    output_name: String(payload.output_name || "output_v2"),
-  };
+  return { name: String(payload.name || "srt_project"), fps: Number(payload.fps || 60), width: Number(payload.width || 1920), height: Number(payload.height || 1080), output_name: String(payload.output_name || "output_v2") };
 }
 
 function readSubtitleRule(card) {
@@ -303,14 +264,7 @@ function renderSegments() {
   for (const segment of rows) {
     const speaker = state.speakers.find((item) => item.speaker_id === segment.speaker_id);
     const row = document.createElement("tr");
-    row.innerHTML = `
-      <td>${escapeHtml(speaker ? speaker.display_name : segment.speaker_id)}</td>
-      <td>${Number(segment.start_sec).toFixed(2)}</td>
-      <td>${Number(segment.end_sec).toFixed(2)}</td>
-      <td>${Number(segment.base_layer || 1)}</td>
-      <td>${escapeHtml(segment.text).replaceAll("\n", "<br>")}</td>
-      <td>${escapeHtml((segment.warnings || []).join(", "))}</td>
-    `;
+    row.innerHTML = `<td>${escapeHtml(speaker ? speaker.display_name : segment.speaker_id)}</td><td>${Number(segment.start_sec).toFixed(2)}</td><td>${Number(segment.end_sec).toFixed(2)}</td><td>${Number(segment.base_layer || 1)}</td><td>${escapeHtml(segment.text).replaceAll("\n", "<br>")}</td><td>${escapeHtml((segment.warnings || []).join(", "))}</td>`;
     segmentTableBody.appendChild(row);
   }
 }
@@ -365,18 +319,8 @@ async function savePresetFromCard(card) {
     if (!templateFile) throw new Error("プリセット保存前に見本EXOを選択してください。");
     await refreshTemplatePreview(card);
     const existing = state.presets.find((preset) => preset.name === displayName);
-    const payload = {
-      preset_id: existing?.preset_id || card.dataset.presetId || "",
-      name: displayName,
-      subtitle_rule: readSubtitleRule(card),
-      base_layer: Number(card.querySelector('[name="base_layer"]').value),
-      template_exo: await serializeFile(templateFile),
-    };
-    const response = await fetchJson("/api/v2/presets", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(payload),
-    });
+    const payload = { preset_id: existing?.preset_id || card.dataset.presetId || "", name: displayName, subtitle_rule: readSubtitleRule(card), base_layer: Number(card.querySelector('[name="base_layer"]').value), template_exo: await serializeFile(templateFile) };
+    const response = await fetchJson("/api/v2/presets", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload) });
     card.dataset.presetId = response.preset_id;
     card._storedTemplateFile = response.template_exo;
     card._templatePreviewMeta = response.template_preview_meta || null;
@@ -459,17 +403,7 @@ function renderPresetTable() {
   presetStatus.textContent = `${state.presets.length} 件のプリセット`;
   for (const preset of state.presets) {
     const row = document.createElement("tr");
-    row.innerHTML = `
-      <td><input data-field="name" value="${escapeAttribute(preset.name || "")}"></td>
-      <td><input data-field="base_layer" type="number" min="1" value="${Number(preset.base_layer || 1)}"></td>
-      <td><input data-field="max_chars_per_line" type="number" min="1" max="80" value="${Number(preset.subtitle_rule?.max_chars_per_line || 18)}"></td>
-      <td><input data-field="max_lines" type="number" min="1" max="4" value="${Number(preset.subtitle_rule?.max_lines || 2)}"></td>
-      <td><input data-field="min_duration_sec" type="number" min="0.1" step="0.1" value="${Number(preset.subtitle_rule?.min_duration_sec || 0.8)}"></td>
-      <td><input data-field="max_duration_sec" type="number" min="0.1" max="10" step="0.1" value="${Number(preset.subtitle_rule?.max_duration_sec || 4.0)}"></td>
-      <td>${escapeHtml(preset.template_exo?.name || "-")}</td>
-      <td>${escapeHtml(formatDateTime(preset.updated_at || ""))}</td>
-      <td class="row-actions"></td>
-    `;
+    row.innerHTML = `<td><input data-field="name" value="${escapeAttribute(preset.name || "")}"></td><td><input data-field="base_layer" type="number" min="1" value="${Number(preset.base_layer || 1)}"></td><td><input data-field="max_chars_per_line" type="number" min="1" max="80" value="${Number(preset.subtitle_rule?.max_chars_per_line || 18)}"></td><td><input data-field="max_lines" type="number" min="1" max="4" value="${Number(preset.subtitle_rule?.max_lines || 2)}"></td><td><input data-field="min_duration_sec" type="number" min="0.1" step="0.1" value="${Number(preset.subtitle_rule?.min_duration_sec || 0.8)}"></td><td><input data-field="max_duration_sec" type="number" min="0.1" max="10" step="0.1" value="${Number(preset.subtitle_rule?.max_duration_sec || 4.0)}"></td><td>${escapeHtml(preset.template_exo?.name || "-")}</td><td>${escapeHtml(formatDateTime(preset.updated_at || ""))}</td><td class="row-actions"></td>`;
     const actions = row.querySelector(".row-actions");
     actions.appendChild(makeRowButton("適用", () => applyPresetRow(preset.preset_id)));
     actions.appendChild(makeRowButton("保存", () => void savePresetRow(row, preset.preset_id)));
@@ -514,11 +448,7 @@ async function savePresetRow(row, presetId) {
       },
       template_exo: preset.template_exo,
     };
-    await fetchJson("/api/v2/presets", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(payload),
-    });
+    await fetchJson("/api/v2/presets", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload) });
     await loadPresets(false);
     presetStatus.textContent = `保存しました: ${payload.name}`;
   } catch (error) {
@@ -528,11 +458,7 @@ async function savePresetRow(row, presetId) {
 
 async function deletePresetRow(presetId) {
   try {
-    await fetchJson("/api/v2/presets/delete", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ preset_id: presetId }),
-    });
+    await fetchJson("/api/v2/presets/delete", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ preset_id: presetId }) });
     if (state.activeSpeakerCard?.dataset.presetId === presetId) {
       state.activeSpeakerCard.dataset.presetId = "";
       const select = state.activeSpeakerCard.querySelector('[name="preset_select"]');
@@ -547,9 +473,7 @@ async function deletePresetRow(presetId) {
 
 function setActiveSpeakerCard(card) {
   if (!card) return;
-  for (const item of speakerList.querySelectorAll(".speaker-card")) {
-    item.classList.toggle("active", item === card);
-  }
+  for (const item of speakerList.querySelectorAll(".speaker-card")) item.classList.toggle("active", item === card);
   state.activeSpeakerCard = card;
   updateActiveSpeakerLabel();
 }
@@ -577,9 +501,7 @@ function normalizeSpeakerLayers() {
 }
 
 function nextSuggestedLayer() {
-  const values = [...speakerList.querySelectorAll('.speaker-card [name="base_layer"]')]
-    .map((input) => Number.parseInt(input.value, 10))
-    .filter((value) => Number.isFinite(value) && value >= 1);
+  const values = [...speakerList.querySelectorAll('.speaker-card [name="base_layer"]')].map((input) => Number.parseInt(input.value, 10)).filter((value) => Number.isFinite(value) && value >= 1);
   return values.length === 0 ? 1 : Math.max(...values) + 1;
 }
 
@@ -593,9 +515,7 @@ function refreshCardStatus(card, suffix = "") {
   const templateFileLabel = card.querySelector('[data-file-label="template"]');
   if (srtFileLabel) srtFileLabel.textContent = srtLabel;
   if (templateFileLabel) templateFileLabel.textContent = templateLabel;
-  const preview = card._templatePreviewMeta
-    ? `\nフォント: ${card._templatePreviewMeta.font || "-"} / サイズ: ${card._templatePreviewMeta.size || "-"} / 色: ${card._templatePreviewMeta.color || "-"} / レイヤー: ${card._templatePreviewMeta.layer || "-"}`
-    : "";
+  const preview = card._templatePreviewMeta ? `\nフォント: ${card._templatePreviewMeta.font || "-"} / サイズ: ${card._templatePreviewMeta.size || "-"} / 色: ${card._templatePreviewMeta.color || "-"} / レイヤー: ${card._templatePreviewMeta.layer || "-"}` : "";
   status.textContent = `SRT: ${srtLabel}\nEXO: ${templateLabel}${preview}${suffix ? `\n${suffix}` : ""}`;
 }
 
@@ -648,21 +568,14 @@ async function resolveCardFile(card, kind) {
   if (selected) return selected;
   const stored = kind === "srt" ? card._storedSrtFile : card._storedTemplateFile;
   if (!stored) return null;
-  return new File([base64ToBytes(stored.content_b64)], stored.name, {
-    type: stored.mime_type || "application/octet-stream",
-  });
+  return new File([base64ToBytes(stored.content_b64)], stored.name, { type: stored.mime_type || "application/octet-stream" });
 }
 
 async function serializeFile(file) {
-  return {
-    name: file.name,
-    mime_type: file.type || "application/octet-stream",
-    content_b64: await fileToBase64(file),
-  };
+  return { name: file.name, mime_type: file.type || "application/octet-stream", content_b64: await fileToBase64(file) };
 }
 
 async function checkApiHealth() {
-  if (!checkApiButton || !apiStatus) return;
   try {
     setBusy(checkApiButton, true);
     const response = await fetchJson("/api/health", { method: "GET" });
@@ -675,7 +588,6 @@ async function checkApiHealth() {
 }
 
 function saveApiBase() {
-  if (!apiBaseInput || !apiStatus) return;
   state.apiBase = normalizeApiBase(apiBaseInput.value);
   localStorage.setItem("srt2subtitle_v2_api_base", state.apiBase);
   apiBaseInput.value = state.apiBase;
@@ -691,16 +603,13 @@ async function fetchJson(path, options) {
   } catch {
     throw new Error(`ERR-NONJSON-001: ${text}`);
   }
-  if (!response.ok) {
-    throw new Error(data.message || data.error || "リクエストに失敗しました。");
-  }
+  if (!response.ok) throw new Error(data.message || data.error || "リクエストに失敗しました。");
   return data;
 }
 
 function loadApiBase() {
   const saved = localStorage.getItem("srt2subtitle_v2_api_base");
   if (saved) return normalizeApiBase(saved);
-  if (window.location.hostname === "127.0.0.1" || window.location.hostname === "localhost") return "";
   return "http://127.0.0.1:8002";
 }
 
@@ -759,12 +668,7 @@ function outputName(extension) {
 }
 
 function escapeHtml(value) {
-  return String(value)
-    .replaceAll("&", "&amp;")
-    .replaceAll("<", "&lt;")
-    .replaceAll(">", "&gt;")
-    .replaceAll('"', "&quot;")
-    .replaceAll("'", "&#39;");
+  return String(value).replaceAll("&", "&amp;").replaceAll("<", "&lt;").replaceAll(">", "&gt;").replaceAll('"', "&quot;").replaceAll("'", "&#39;");
 }
 
 function escapeAttribute(value) {

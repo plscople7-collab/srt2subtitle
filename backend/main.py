@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import argparse
 import json
 import base64
 import mimetypes
@@ -37,6 +38,14 @@ ALLOWED_AUDIO_SUFFIXES = {".wav", ".mp3", ".m4a", ".aac", ".flac", ".ogg", ".opu
 class RequestHandler(BaseHTTPRequestHandler):
     server_version = "SubtitleExoServer/0.1"
 
+    def end_headers(self) -> None:
+        self._set_cors_headers()
+        super().end_headers()
+
+    def do_OPTIONS(self) -> None:
+        self.send_response(HTTPStatus.NO_CONTENT)
+        self.end_headers()
+
     def do_GET(self) -> None:
         parsed = urlparse(self.path)
         if parsed.path == "/":
@@ -45,8 +54,11 @@ class RequestHandler(BaseHTTPRequestHandler):
         if parsed.path in {"/v2", "/v2/"}:
             self._serve_static("v2.html")
             return
-        if parsed.path in {"/app.js", "/style.css", "/v2.js"}:
+        if parsed.path in {"/app.js", "/style.css", "/v2.js", "/v2.css"}:
             self._serve_static(parsed.path.lstrip("/"))
+            return
+        if parsed.path == "/api/health":
+            self._send_json(HTTPStatus.OK, {"ok": True, "runtime": "local-python-api"})
             return
         if parsed.path == "/api/projects":
             self._send_json(HTTPStatus.OK, {"projects": STORE.list_projects()})
@@ -100,6 +112,9 @@ class RequestHandler(BaseHTTPRequestHandler):
                 return
             if parsed.path == "/api/v2/presets":
                 self._handle_v2_save_preset()
+                return
+            if parsed.path == "/api/v2/presets/delete":
+                self._handle_v2_delete_preset()
                 return
             if parsed.path == "/api/v2/template-preview":
                 self._handle_v2_template_preview()
@@ -333,7 +348,6 @@ class RequestHandler(BaseHTTPRequestHandler):
                 "exo_content_b64": base64.b64encode(result["exo_bytes"]).decode("ascii"),
                 "srt_content": result["srt_text"],
                 "json_content": result["json_text"],
-                "preview_html": result["preview_html"],
             },
         )
 
@@ -361,6 +375,14 @@ class RequestHandler(BaseHTTPRequestHandler):
             payload.get("preset_id"),
         )
         self._send_json(HTTPStatus.OK, saved)
+
+    def _handle_v2_delete_preset(self) -> None:
+        payload = self._read_json()
+        preset_id = str(payload.get("preset_id", "")).strip()
+        if not preset_id:
+            raise ValidationError("ERR-SPEAKER-001", "preset_id is required.")
+        V2_STORE.delete_preset(preset_id)
+        self._send_json(HTTPStatus.OK, {"deleted": True, "preset_id": preset_id})
 
     def _handle_v2_template_preview(self) -> None:
         content_type = self.headers.get("Content-Type", "")
@@ -444,6 +466,12 @@ class RequestHandler(BaseHTTPRequestHandler):
         self.end_headers()
         self.wfile.write(content)
 
+    def _set_cors_headers(self) -> None:
+        self.send_header("Access-Control-Allow-Origin", "*")
+        self.send_header("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
+        self.send_header("Access-Control-Allow-Headers", "Content-Type")
+        self.send_header("Access-Control-Max-Age", "86400")
+
 
 def _get_text_field(form: dict[str, list[dict]], key: str) -> str:
     items = form.get(key)
@@ -474,11 +502,14 @@ def _find_cached_transcript(project_id: str, relative_audio_path: str, model_nam
     return None
 
 
-def run() -> None:
-    server = ThreadingHTTPServer(("127.0.0.1", 8000), RequestHandler)
-    print("Serving on http://127.0.0.1:8000")
+def run(port: int = 8000) -> None:
+    server = ThreadingHTTPServer(("127.0.0.1", port), RequestHandler)
+    print(f"Serving on http://127.0.0.1:{port}")
     server.serve_forever()
 
 
 if __name__ == "__main__":
-    run()
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--port", type=int, default=8000)
+    args = parser.parse_args()
+    run(port=args.port)

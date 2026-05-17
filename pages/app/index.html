@@ -4,14 +4,23 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>SRT→EXO変換 v0.2</title>
-  <link rel="stylesheet" href="/v2.css">
+  <link rel="stylesheet" href="./style.css">
 </head>
 <body>
   <main class="shell">
     <header class="app-header">
       <div>
         <p class="eyebrow">SRT→EXO変換</p>
-        <h1>v0.2 ローカル変換</h1>
+        <h1>v0.2 GitHub Pages共有版</h1>
+      </div>
+      <div class="api-strip">
+        <label>
+          <span>API URL</span>
+          <input id="apiBaseInput" value="http://127.0.0.1:8002" placeholder="http://127.0.0.1:8002">
+        </label>
+        <button id="saveApiBaseButton" class="ghost" type="button">保存</button>
+        <button id="checkApiButton" class="ghost" type="button">確認</button>
+        <span id="apiStatus" class="status">未確認</span>
       </div>
       <div class="header-actions">
         <button id="saveBundleButton" class="ghost" type="button">まとめて保存</button>
@@ -191,6 +200,6 @@
     </article>
   </template>
 
-  <script src="/v2.js"></script>
+  <script src="./app.js"></script>
 </body>
 </html>

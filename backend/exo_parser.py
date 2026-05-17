@@ -40,46 +40,41 @@ def parse_exo_template(content: str, speaker_id: str, source_name: str, file_enc
     sections = _parse_sections(content)
     exedit = next((section for section in sections if section.name == "[exedit]"), None)
     if exedit is None:
-        raise ExoTemplateError("ERR-EXO-TEMPLATE-001", "EXO の [exedit] セクションが見つかりません。")
+        raise ExoTemplateError("ERR-EXO-TEMPLATE-001", "\u0045\u0058\u004F \u306B [exedit] \u30BB\u30AF\u30B7\u30E7\u30F3\u304C\u3042\u308A\u307E\u305B\u3093\u3002")
 
-    text_sections: list[tuple[ExoSection, str, str]] = []
-    candidates: list[tuple[ExoSection, list[ExoSection]]] = []
+    candidates: list[tuple[ExoSection, list[ExoSection], str, str]] = []
     for section in sections:
         if not section.name.endswith(".0]"):
             continue
-        if section.get("_name") != "テキスト":
+        if section.get("text") is None:
             continue
         decoded_text, encoding = decode_text_value(section.get("text", ""))
-        text_sections.append((section, decoded_text, encoding))
-        if decoded_text == "字幕テスト":
-            parent_name = section.name.split(".")[0] + "]"
-            sibling_sections = [item for item in sections if item.name == parent_name or item.name.startswith(parent_name[:-1] + ".")]
-            candidates.append((section, sibling_sections))
-
-    if not candidates and len(text_sections) == 1:
-        section, decoded_text, encoding = text_sections[0]
         parent_name = section.name.split(".")[0] + "]"
         sibling_sections = [item for item in sections if item.name == parent_name or item.name.startswith(parent_name[:-1] + ".")]
-        candidates.append((section, sibling_sections))
-        placeholder_text = decoded_text
-    elif not candidates:
-        raise ExoTemplateError("ERR-EXO-TEMPLATE-001", "本文が「字幕テスト」のテキストオブジェクトが見つかりません。")
+        candidates.append((section, sibling_sections, decoded_text, encoding))
+
+    if not candidates:
+        raise ExoTemplateError("ERR-EXO-TEMPLATE-001", "\u30C6\u30AD\u30B9\u30C8\u30AA\u30D6\u30B8\u30A7\u30AF\u30C8\u304C\u898B\u3064\u304B\u308A\u307E\u305B\u3093\u3002")
+
+    exact = next((candidate for candidate in candidates if candidate[2] == "\u5B57\u5E55\u30C6\u30B9\u30C8"), None)
+    if exact is not None:
+        text_section, object_sections, placeholder_text, encoding = exact
+    elif len(candidates) == 1:
+        text_section, object_sections, placeholder_text, encoding = candidates[0]
     else:
-        placeholder_text = "字幕テスト"
+        text_section, object_sections, placeholder_text, encoding = candidates[0]
 
-    if len(candidates) > 1:
-        raise ExoTemplateError("ERR-EXO-TEMPLATE-002", "「字幕テスト」に一致する候補が複数あります。")
+    parent_section = next((section for section in object_sections if "." not in section.name.strip("[]")), None)
+    if parent_section is None:
+        raise ExoTemplateError("ERR-EXO-TEMPLATE-001", "\u89AA\u30AA\u30D6\u30B8\u30A7\u30AF\u30C8\u304C\u898B\u3064\u304B\u308A\u307E\u305B\u3093\u3002")
 
-    text_section, object_sections = candidates[0]
-    parent_section = next(section for section in object_sections if "." not in section.name.strip("[]"))
     preview = {
         "font": text_section.get("font", ""),
-        "size": text_section.get("サイズ", ""),
+        "size": text_section.get("size", text_section.get("\u30B5\u30A4\u30BA", "")),
         "color": text_section.get("color", ""),
         "color2": text_section.get("color2", ""),
         "layer": parent_section.get("layer", ""),
     }
-    _, encoding = decode_text_value(text_section.get("text", ""))
 
     return {
         "speaker_id": speaker_id,
@@ -100,7 +95,7 @@ def decode_exo_bytes(raw: bytes) -> tuple[str, str]:
             return raw.decode(encoding), encoding
         except UnicodeDecodeError:
             continue
-    raise ExoTemplateError("ERR-EXO-ENCODING-001", "対応できない EXO エンコーディングです。")
+    raise ExoTemplateError("ERR-EXO-ENCODING-001", "\u5BFE\u5FDC\u3067\u304D\u306A\u3044 EXO \u30A8\u30F3\u30B3\u30FC\u30C7\u30A3\u30F3\u30B0\u3067\u3059\u3002")
 
 
 def decode_text_value(value: str) -> tuple[str, str]:
