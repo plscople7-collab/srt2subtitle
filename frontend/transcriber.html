@@ -1,0 +1,105 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>音声→SRT ローカル変換</title>
+  <link rel="stylesheet" href="/transcriber.css">
+</head>
+<body>
+  <main class="shell">
+    <header class="app-header">
+      <div>
+        <p class="eyebrow">Local Transcriber</p>
+        <h1>音声→SRT</h1>
+      </div>
+      <div class="header-actions">
+        <a class="nav-link" href="/studio">統合</a>
+        <a class="nav-link" href="/v2">SRT→EXOへ</a>
+        <button id="transcribeButton" class="primary" type="button">SRT生成</button>
+      </div>
+    </header>
+
+    <div class="workbench">
+      <section class="surface input-pane">
+        <div class="section-head">
+          <h2>入力</h2>
+          <span id="inputStatus" class="status">未選択</span>
+        </div>
+
+        <label id="dropZone" class="drop-zone">
+          <span>音声/動画</span>
+          <strong>ファイル選択 / D&amp;D</strong>
+          <input id="mediaInput" type="file" accept=".wav,.mp3,.m4a,.aac,.flac,.ogg,.opus,.wma,.webm,.mp4,.mov,.mkv" multiple>
+        </label>
+
+        <div class="settings-grid">
+          <label>
+            <span>エンジン</span>
+            <select id="engineInput">
+              <option value="whisper">Whisper</option>
+            </select>
+          </label>
+          <label>
+            <span>モデル</span>
+            <select id="modelInput">
+              <option value="tiny">tiny</option>
+              <option value="base" selected>base</option>
+              <option value="small">small</option>
+              <option value="medium">medium</option>
+            </select>
+          </label>
+          <label>
+            <span>言語</span>
+            <input id="languageInput" value="ja">
+          </label>
+        </div>
+
+        <div class="file-list-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>ファイル</th>
+                <th>サイズ</th>
+                <th>形式</th>
+              </tr>
+            </thead>
+            <tbody id="fileTableBody"></tbody>
+          </table>
+        </div>
+      </section>
+
+      <section class="surface result-pane">
+        <div class="section-head">
+          <h2>出力</h2>
+          <div class="inline-actions">
+            <button id="downloadAllSrtButton" class="ghost" type="button" disabled>SRT一括保存</button>
+            <button id="downloadAllJsonButton" class="ghost" type="button" disabled>JSON一括保存</button>
+          </div>
+        </div>
+
+        <div class="status-strip">
+          <span>状態</span>
+          <p id="generationStatus" class="status">未実行</p>
+        </div>
+
+        <div class="result-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>元ファイル</th>
+                <th>字幕数</th>
+                <th>キャッシュ</th>
+                <th>出力</th>
+              </tr>
+            </thead>
+            <tbody id="resultTableBody"></tbody>
+          </table>
+        </div>
+      </section>
+    </div>
+  </main>
+
+  <script src="/transcriber.js"></script>
+</body>
+</html>

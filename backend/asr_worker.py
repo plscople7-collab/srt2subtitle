@@ -22,19 +22,26 @@ def main() -> int:
     args = parser.parse_args()
 
     try:
-        import imageio_ffmpeg
-        import whisper
+        whisper = _load_whisper()
+        if whisper is None:
+            raise ModuleNotFoundError("No usable whisper module found")
     except Exception as exc:  # noqa: BLE001
-        print(str(exc), file=sys.stderr)
+        print(f"openai-whisper が見つかりません: {exc}", file=sys.stderr)
         return 1
 
-    ffmpeg_exe = Path(imageio_ffmpeg.get_ffmpeg_exe())
-    ffmpeg_dir = ROOT_DIR / ".tmp" / "ffmpeg-bin"
-    ffmpeg_dir.mkdir(parents=True, exist_ok=True)
-    ffmpeg_alias = ffmpeg_dir / "ffmpeg.exe"
-    if not ffmpeg_alias.exists():
-        shutil.copy2(ffmpeg_exe, ffmpeg_alias)
-    os.environ["PATH"] = str(ffmpeg_dir) + os.pathsep + os.environ.get("PATH", "")
+    imageio_ffmpeg = _load_imageio_ffmpeg()
+
+    if imageio_ffmpeg is not None:
+        ffmpeg_exe = Path(imageio_ffmpeg.get_ffmpeg_exe())
+        ffmpeg_dir = ROOT_DIR / ".tmp" / "ffmpeg-bin"
+        ffmpeg_dir.mkdir(parents=True, exist_ok=True)
+        ffmpeg_alias = ffmpeg_dir / "ffmpeg.exe"
+        if not ffmpeg_alias.exists():
+            shutil.copy2(ffmpeg_exe, ffmpeg_alias)
+        os.environ["PATH"] = str(ffmpeg_dir) + os.pathsep + os.environ.get("PATH", "")
+    elif shutil.which("ffmpeg") is None:
+        print("ffmpeg が見つかりません。imageio-ffmpeg を入れるか、ffmpeg を PATH に追加してください。", file=sys.stderr)
+        return 1
 
     try:
         model = whisper.load_model(args.model)
@@ -77,6 +84,56 @@ def main() -> int:
         )
     print(json.dumps(segments, ensure_ascii=False))
     return 0
+
+
+def _load_whisper():
+    try:
+        import whisper
+        if hasattr(whisper, "load_model"):
+            return whisper
+    except Exception:  # noqa: BLE001
+        pass
+
+    sys.modules.pop("whisper", None)
+    removed = False
+    if str(DEPS_DIR) in sys.path:
+        sys.path.remove(str(DEPS_DIR))
+        removed = True
+    try:
+        import whisper
+        if hasattr(whisper, "load_model"):
+            return whisper
+    except Exception:  # noqa: BLE001
+        return None
+    if removed:
+        sys.path.insert(0, str(DEPS_DIR))
+    return None
+
+
+def _load_imageio_ffmpeg():
+    try:
+        import imageio_ffmpeg
+        if hasattr(imageio_ffmpeg, "get_ffmpeg_exe"):
+            return imageio_ffmpeg
+    except Exception:  # noqa: BLE001
+        pass
+
+    # A broken target install can appear as an empty namespace package. In that
+    # case, try the normal Python site-packages fallback for imageio-ffmpeg.
+    sys.modules.pop("imageio_ffmpeg", None)
+    removed = False
+    if str(DEPS_DIR) in sys.path:
+        sys.path.remove(str(DEPS_DIR))
+        removed = True
+    try:
+        import imageio_ffmpeg
+        if hasattr(imageio_ffmpeg, "get_ffmpeg_exe"):
+            return imageio_ffmpeg
+    except Exception:  # noqa: BLE001
+        return None
+    if removed:
+        sys.path.insert(0, str(DEPS_DIR))
+    return None
 
 
 if __name__ == "__main__":

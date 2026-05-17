@@ -13,6 +13,7 @@ from urllib.parse import urlparse
 
 from .exo_parser import ExoTemplateError, decode_exo_bytes, parse_exo_template
 from .exo_writer import assign_frames, build_exo, build_segments_json, build_srt
+from .local_transcriber import MediaInput, transcribe_media_to_srt
 from .preset_store import PresetStore
 from .project_store import ProjectStore
 from .subtitle_splitter import split_segments
@@ -54,7 +55,22 @@ class RequestHandler(BaseHTTPRequestHandler):
         if parsed.path in {"/v2", "/v2/"}:
             self._serve_static("v2.html")
             return
-        if parsed.path in {"/app.js", "/style.css", "/v2.js", "/v2.css"}:
+        if parsed.path in {"/transcriber", "/transcriber/"}:
+            self._serve_static("transcriber.html")
+            return
+        if parsed.path in {"/studio", "/studio/"}:
+            self._serve_static("studio.html")
+            return
+        if parsed.path in {
+            "/app.js",
+            "/style.css",
+            "/v2.js",
+            "/v2.css",
+            "/transcriber.js",
+            "/transcriber.css",
+            "/studio.js",
+            "/studio.css",
+        }:
             self._serve_static(parsed.path.lstrip("/"))
             return
         if parsed.path == "/api/health":
@@ -103,6 +119,9 @@ class RequestHandler(BaseHTTPRequestHandler):
                 return
             if parsed.path == "/api/transcribe":
                 self._handle_transcribe()
+                return
+            if parsed.path == "/api/transcriber/transcribe":
+                self._handle_local_transcriber()
                 return
             if parsed.path == "/api/export/exo":
                 self._handle_export()
@@ -283,6 +302,27 @@ class RequestHandler(BaseHTTPRequestHandler):
         framed_segments = assign_frames(recognized_segments, float(project["project"]["fps"]), speaker_order)
         STORE.save_segments(project["project_id"], framed_segments)
         self._send_json(HTTPStatus.OK, {"segments": framed_segments})
+
+    def _handle_local_transcriber(self) -> None:
+        content_type = self.headers.get("Content-Type", "")
+        body = self.rfile.read(int(self.headers.get("Content-Length", "0")))
+        form = self._parse_multipart(content_type, body)
+        model_name = _get_optional_text_field(form, "model") or "base"
+        language = _get_optional_text_field(form, "language") or "ja"
+        engine = _get_optional_text_field(form, "engine") or "whisper"
+        media_parts = form.get("media_file", [])
+        media_inputs = [
+            MediaInput(filename=part["filename"] or f"audio_{index}.wav", content=part["content"])
+            for index, part in enumerate(media_parts, start=1)
+        ]
+        result = transcribe_media_to_srt(
+            media_inputs,
+            root_dir=ROOT_DIR,
+            model_name=model_name,
+            language=language,
+            engine=engine,
+        )
+        self._send_json(HTTPStatus.OK, result)
 
     def _handle_export(self) -> None:
         payload = self._read_json()

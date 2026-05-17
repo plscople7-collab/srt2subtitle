@@ -3,36 +3,34 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>SRT→EXO変換 v0.2</title>
-  <link rel="stylesheet" href="/v2.css">
+  <title>音声→EXO 統合スタジオ</title>
+  <link rel="stylesheet" href="/studio.css">
 </head>
 <body>
   <main class="shell">
     <header class="app-header">
       <div>
-        <p class="eyebrow">SRT→EXO変換</p>
-        <h1>v0.2 ローカル変換</h1>
+        <p class="eyebrow">Integrated Studio</p>
+        <h1>音声→EXO</h1>
       </div>
       <div class="header-actions">
-        <a class="nav-link" href="/studio">統合</a>
-        <a class="nav-link" href="/transcriber">音声→SRT</a>
-        <button id="saveBundleButton" class="ghost" type="button">まとめて保存</button>
-        <button id="loadBundleButton" class="ghost" type="button">まとめて読込</button>
-        <input id="bundleFileInput" type="file" accept=".json" hidden>
-        <button id="convertButton" class="primary" type="button">変換</button>
+        <a class="nav-link" href="/transcriber">SRT生成</a>
+        <a class="nav-link" href="/v2">SRT→EXO</a>
+        <button id="runAllButton" class="primary" type="button">EXO自動保存</button>
       </div>
     </header>
 
-    <div class="workbench">
-      <section class="surface input-pane">
+    <div class="studio-grid">
+      <section class="surface setup-pane">
         <div class="section-head">
-          <h2>入力</h2>
-          <p id="projectStatus" class="status">未保存</p>
+          <h2>設定</h2>
+          <span id="setupStatus" class="status">未実行</span>
         </div>
+
         <form id="projectForm" class="project-grid">
           <label class="wide">
-            <span>プロジェクト名</span>
-            <input name="name" value="srt_project" required>
+            <span>プロジェクト</span>
+            <input name="name" value="audio_exo_project" required>
           </label>
           <label>
             <span>fps</span>
@@ -48,14 +46,27 @@
           </label>
           <label>
             <span>出力名</span>
-            <input name="output_name" value="output_v2" required>
+            <input name="output_name" value="output_studio" required>
+          </label>
+          <label>
+            <span>モデル</span>
+            <select id="modelInput">
+              <option value="tiny">tiny</option>
+              <option value="base" selected>base</option>
+              <option value="small">small</option>
+              <option value="medium">medium</option>
+            </select>
+          </label>
+          <label>
+            <span>言語</span>
+            <input id="languageInput" value="ja">
           </label>
         </form>
 
         <div class="section-head subhead">
           <h2>話者</h2>
           <div class="inline-actions">
-            <button id="reloadPresetsButton" class="ghost" type="button">再読込</button>
+            <button id="reloadPresetsButton" class="ghost" type="button">プリセット再読込</button>
             <button id="addSpeakerButton" class="ghost" type="button">話者追加</button>
           </div>
         </div>
@@ -65,32 +76,26 @@
       <section class="surface preset-pane">
         <div class="section-head">
           <h2>プリセット</h2>
-          <span id="activeSpeakerLabel" class="status-inline">選択中の話者: なし</span>
+          <span id="presetStatus" class="status">読込中</span>
         </div>
         <div class="table-wrap preset-wrap">
-          <table class="preset-table">
+          <table>
             <thead>
               <tr>
                 <th>名前</th>
                 <th>レイヤー</th>
-                <th>文字数</th>
-                <th>行数</th>
-                <th>最短秒</th>
-                <th>最長秒</th>
-                <th>見本EXO</th>
-                <th>更新日時</th>
-                <th>操作</th>
+                <th>EXO</th>
+                <th>更新</th>
               </tr>
             </thead>
             <tbody id="presetTableBody"></tbody>
           </table>
         </div>
-        <p id="presetStatus" class="status">プリセットなし</p>
       </section>
 
       <section class="surface result-pane">
         <div class="section-head">
-          <h2>出力</h2>
+          <h2>結果</h2>
           <div class="inline-actions">
             <button id="downloadExoButton" class="ghost" type="button" disabled>EXO</button>
             <button id="downloadSrtButton" class="ghost" type="button" disabled>SRT</button>
@@ -98,20 +103,13 @@
           </div>
         </div>
 
+        <div class="progress-list" id="progressList"></div>
         <div class="check-strip">
-          <span class="check-title">変換チェック</span>
+          <span>変換</span>
           <span id="analysisSummary" class="status">未変換</span>
         </div>
         <ul id="analysisList" class="status-list"></ul>
 
-        <div class="result-toolbar">
-          <label>
-            <span>話者</span>
-            <select id="speakerFilter">
-              <option value="">全話者</option>
-            </select>
-          </label>
-        </div>
         <div class="table-wrap result-wrap">
           <table>
             <thead>
@@ -127,7 +125,6 @@
             <tbody id="segmentTableBody"></tbody>
           </table>
         </div>
-        <p id="generationStatus" class="status">未変換</p>
       </section>
     </div>
   </main>
@@ -136,15 +133,12 @@
     <article class="speaker-card">
       <div class="speaker-header">
         <h3>話者</h3>
-        <div class="inline-actions">
-          <button class="ghost save-preset" type="button">プリセット保存</button>
-          <button class="icon-button danger remove-speaker" type="button" title="削除">×</button>
-        </div>
+        <button class="icon-button danger remove-speaker" type="button" title="削除">×</button>
       </div>
       <div class="speaker-grid">
         <label class="name-field">
           <span>話者名</span>
-          <input name="display_name" placeholder="話者A" required>
+          <input name="display_name" placeholder="話者" required>
         </label>
         <label class="preset-field">
           <span>プリセット</span>
@@ -152,13 +146,21 @@
             <option value="">未選択</option>
           </select>
         </label>
+        <label class="drop-field file-field" data-kind="media">
+          <span>音声/動画</span>
+          <div class="file-picker">
+            <button class="ghost pick-file" data-kind="media" type="button">選択</button>
+            <span class="file-name" data-file-label="media">-</span>
+          </div>
+          <input name="media_file" class="sr-only-file" type="file" accept=".wav,.mp3,.m4a,.aac,.flac,.ogg,.opus,.wma,.webm,.mp4,.mov,.mkv">
+        </label>
         <label class="drop-field file-field" data-kind="srt">
           <span>SRT</span>
           <div class="file-picker">
             <button class="ghost pick-file" data-kind="srt" type="button">選択</button>
             <span class="file-name" data-file-label="srt">-</span>
           </div>
-          <input name="srt_file" class="sr-only-file" type="file" accept=".srt" required>
+          <input name="srt_file" class="sr-only-file" type="file" accept=".srt">
         </label>
         <label class="drop-field file-field" data-kind="template">
           <span>見本EXO</span>
@@ -166,7 +168,7 @@
             <button class="ghost pick-file" data-kind="template" type="button">選択</button>
             <span class="file-name" data-file-label="template">-</span>
           </div>
-          <input name="template_exo" class="sr-only-file" type="file" accept=".exo" required>
+          <input name="template_exo" class="sr-only-file" type="file" accept=".exo">
         </label>
         <label>
           <span>文字数</span>
@@ -189,10 +191,10 @@
           <input name="base_layer" type="number" value="1" min="1" required>
         </label>
       </div>
-      <p class="template-preview speaker-source-status">SRT: -&#10;EXO: -</p>
+      <p class="source-status">音声: - / SRT: - / EXO: -</p>
     </article>
   </template>
 
-  <script src="/v2.js"></script>
+  <script src="/studio.js"></script>
 </body>
 </html>

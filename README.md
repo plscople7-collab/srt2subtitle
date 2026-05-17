@@ -76,10 +76,22 @@ data/
 ## v0.2 draft path
 
 - alpha route: `http://127.0.0.1:8000/`
+- integrated studio route: `http://127.0.0.1:8000/studio`
 - v0.2 route: `http://127.0.0.1:8000/v2`
+- local transcriber route: `http://127.0.0.1:8000/transcriber`
+
+`/studio` is the one-screen local path. Set speakers, presets, and audio/video files, then run one action to transcribe, convert, and download the generated `.exo`.
 
 `/v2` is the new SRT based conversion path. It does not run speech recognition.
 Provide one `.srt` and one template `.exo` for each speaker, then export merged `.exo`, `.srt`, and `.json`.
+
+`/transcriber` is the local speech-to-SRT path. It accepts audio/video files, runs local Whisper through the Python worker, and exports one `.srt` plus one `.segments.json` per input file. Use the generated `.srt` files as `/v2` speaker inputs.
+
+If Whisper is not installed for Python 3.12, run:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File tools\setup_local_transcriber.ps1
+```
 
 ### v2 local project bundle
 
