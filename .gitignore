@@ -2,6 +2,7 @@
 .venv312/
 .deps312/
 .tmp/
+dist/
 
 __pycache__/
 *.py[cod]

@@ -76,16 +76,24 @@
       <section class="surface preset-pane">
         <div class="section-head">
           <h2>プリセット</h2>
-          <span id="presetStatus" class="status">読込中</span>
+          <div class="inline-actions">
+            <button id="saveActivePresetButton" class="ghost" type="button">選択話者を保存</button>
+            <span id="presetStatus" class="status">読込中</span>
+          </div>
         </div>
         <div class="table-wrap preset-wrap">
-          <table>
+          <table class="preset-table">
             <thead>
               <tr>
                 <th>名前</th>
                 <th>レイヤー</th>
+                <th>文字</th>
+                <th>行</th>
+                <th>最短</th>
+                <th>最長</th>
                 <th>EXO</th>
                 <th>更新</th>
+                <th>操作</th>
               </tr>
             </thead>
             <tbody id="presetTableBody"></tbody>
@@ -133,7 +141,10 @@
     <article class="speaker-card">
       <div class="speaker-header">
         <h3>話者</h3>
-        <button class="icon-button danger remove-speaker" type="button" title="削除">×</button>
+        <div class="inline-actions">
+          <button class="ghost save-preset" type="button">プリセット保存</button>
+          <button class="icon-button danger remove-speaker" type="button" title="削除">×</button>
+        </div>
       </div>
       <div class="speaker-grid">
         <label class="name-field">

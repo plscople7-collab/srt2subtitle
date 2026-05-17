@@ -91,7 +91,7 @@ h3 {
 
 .studio-grid {
   display: grid;
-  grid-template-columns: minmax(440px, 1.08fr) minmax(330px, 0.78fr) minmax(440px, 1fr);
+  grid-template-columns: minmax(420px, 1fr) minmax(430px, 1fr) minmax(420px, 1fr);
   gap: var(--gap);
   align-items: start;
 }
@@ -350,6 +350,34 @@ th {
   color: var(--muted);
   background: #f7f9f9;
   font-weight: 700;
+}
+
+.preset-table {
+  min-width: 760px;
+}
+
+.preset-table input {
+  height: 26px;
+  padding: 3px 5px;
+}
+
+.preset-table [data-field="base_layer"],
+.preset-table [data-field="max_chars_per_line"],
+.preset-table [data-field="max_lines"],
+.preset-table [data-field="min_duration_sec"],
+.preset-table [data-field="max_duration_sec"] {
+  width: 58px;
+}
+
+.row-actions {
+  display: flex;
+  gap: 4px;
+  white-space: nowrap;
+}
+
+.row-actions button {
+  min-height: 26px;
+  padding: 3px 7px;
 }
 
 @media (max-width: 1180px) {

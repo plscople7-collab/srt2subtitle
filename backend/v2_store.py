@@ -59,11 +59,16 @@ class V2Store:
         items: list[dict] = []
         for path in sorted(self.presets_dir.glob("*/preset.json")):
             data = self._read_json(path)
+            if data.get("deleted_at"):
+                continue
             items.append(data)
         return items
 
     def get_preset(self, preset_id: str) -> dict:
-        return self._read_json(self.presets_dir / preset_id / "preset.json")
+        data = self._read_json(self.presets_dir / preset_id / "preset.json")
+        if data.get("deleted_at"):
+            raise FileNotFoundError(preset_id)
+        return data
 
     def save_preset(self, payload: dict, preset_id: str | None = None) -> dict:
         normalized_id = preset_id or payload.get("preset_id") or f"v2preset_{uuid.uuid4().hex[:8]}"
@@ -93,11 +98,10 @@ class V2Store:
         preset_json = preset_dir / "preset.json"
         if not preset_json.exists():
             raise FileNotFoundError(preset_id)
-        preset_json.unlink()
-        try:
-            preset_dir.rmdir()
-        except OSError:
-            pass
+        data = self._read_json(preset_json)
+        data["deleted_at"] = _utc_now()
+        data["updated_at"] = data["deleted_at"]
+        self._write_json(preset_json, data)
 
     @staticmethod
     def _read_json(path: Path) -> dict:

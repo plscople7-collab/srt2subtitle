@@ -15,6 +15,7 @@ const speakerTemplate = document.querySelector("#speakerTemplate");
 const runAllButton = document.querySelector("#runAllButton");
 const addSpeakerButton = document.querySelector("#addSpeakerButton");
 const reloadPresetsButton = document.querySelector("#reloadPresetsButton");
+const saveActivePresetButton = document.querySelector("#saveActivePresetButton");
 const setupStatus = document.querySelector("#setupStatus");
 const presetStatus = document.querySelector("#presetStatus");
 const presetTableBody = document.querySelector("#presetTableBody");
@@ -30,6 +31,7 @@ const languageInput = document.querySelector("#languageInput");
 
 addSpeakerButton.addEventListener("click", () => addSpeakerCard());
 reloadPresetsButton.addEventListener("click", () => void loadPresets(true));
+saveActivePresetButton.addEventListener("click", () => void savePresetFromActiveSpeaker());
 runAllButton.addEventListener("click", () => void runIntegratedExport());
 downloadExoButton.addEventListener("click", () => downloadBase64(outputName("exo"), state.output.exoContentB64, "application/octet-stream"));
 downloadSrtButton.addEventListener("click", () => downloadText(outputName("srt"), state.output.srtContent));
@@ -47,6 +49,7 @@ function addSpeakerCard(initialData = null) {
   const presetSelect = card.querySelector('[name="preset_select"]');
   const pickButtons = card.querySelectorAll(".pick-file");
 
+  card.querySelector(".save-preset").addEventListener("click", () => void savePresetFromCard(card));
   card.querySelector(".remove-speaker").addEventListener("click", () => {
     if (state.activeSpeakerCard === card) state.activeSpeakerCard = null;
     card.remove();
@@ -54,7 +57,7 @@ function addSpeakerCard(initialData = null) {
     normalizeSpeakerLayers();
   });
   card.addEventListener("click", () => setActiveSpeakerCard(card));
-  presetSelect.addEventListener("change", () => applyPresetToCard(card, presetSelect.value));
+  presetSelect.addEventListener("change", () => applySelectedPresetFromCard(card));
   card.querySelector('[name="base_layer"]').addEventListener("change", normalizeSpeakerLayers);
   for (const input of card.querySelectorAll('input[type="file"]')) {
     input.addEventListener("change", () => refreshCardStatus(card));
@@ -198,16 +201,62 @@ async function loadPresets(showStatus) {
   }
 }
 
-function applyPresetToCard(card, presetId) {
+async function savePresetFromActiveSpeaker() {
+  if (!state.activeSpeakerCard) {
+    presetStatus.textContent = "先に保存元の話者を選択してください。";
+    return;
+  }
+  await savePresetFromCard(state.activeSpeakerCard);
+}
+
+async function savePresetFromCard(card) {
+  try {
+    setActiveSpeakerCard(card);
+    const displayName = card.querySelector('[name="display_name"]').value.trim();
+    if (!displayName) throw new Error("プリセット保存前に話者名を入力してください。");
+    const templateFile = await resolveCardFile(card, "template");
+    if (!templateFile) throw new Error("プリセット保存前に見本EXOを選択してください。");
+    const existing = state.presets.find((preset) => preset.name === displayName);
+    const payload = {
+      preset_id: existing?.preset_id || card.dataset.presetId || "",
+      name: displayName,
+      subtitle_rule: readSubtitleRule(card),
+      base_layer: Number(card.querySelector('[name="base_layer"]').value),
+      template_exo: await serializeFile(templateFile),
+    };
+    const response = await fetchJson("/api/v2/presets", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    });
+    card.dataset.presetId = response.preset_id;
+    card._storedTemplateFile = response.template_exo;
+    card._templatePreviewMeta = response.template_preview_meta || null;
+    await loadPresets(false);
+    renderPresetSelectOptions(card);
+    card.querySelector('[name="preset_select"]').value = response.preset_id;
+    refreshCardStatus(card, "プリセット保存");
+    presetStatus.textContent = `保存しました: ${displayName}`;
+  } catch (error) {
+    presetStatus.textContent = formatError(error, "プリセット保存に失敗しました。");
+  }
+}
+
+function applySelectedPresetFromCard(card) {
+  const presetId = card.querySelector('[name="preset_select"]').value;
   if (!presetId) {
     card.dataset.presetId = "";
     card._storedTemplateFile = null;
     card._templatePreviewMeta = null;
-    refreshCardStatus(card);
+    refreshCardStatus(card, "プリセット解除");
     return;
   }
   const preset = state.presets.find((item) => item.preset_id === presetId);
   if (!preset) return;
+  applyPresetToCard(card, preset);
+}
+
+function applyPresetToCard(card, preset) {
   card.dataset.presetId = preset.preset_id || "";
   card.querySelector('[name="display_name"]').value = preset.name || "";
   card.querySelector('[name="max_chars_per_line"]').value = preset.subtitle_rule?.max_chars_per_line ?? 18;
@@ -215,6 +264,7 @@ function applyPresetToCard(card, presetId) {
   card.querySelector('[name="min_duration_sec"]').value = preset.subtitle_rule?.min_duration_sec ?? 0.8;
   card.querySelector('[name="max_duration_sec"]').value = preset.subtitle_rule?.max_duration_sec ?? 4.0;
   card.querySelector('[name="base_layer"]').value = preset.base_layer ?? nextSuggestedLayer();
+  card.querySelector('[name="preset_select"]').value = preset.preset_id || "";
   card._storedTemplateFile = preset.template_exo || null;
   card._templatePreviewMeta = preset.template_preview_meta || null;
   normalizeSpeakerLayers();
@@ -236,15 +286,98 @@ function renderPresetSelectOptions(card) {
 
 function renderPresetTable() {
   presetTableBody.innerHTML = "";
+  if (state.presets.length === 0) {
+    presetStatus.textContent = "プリセットなし";
+    return;
+  }
   for (const preset of state.presets) {
     const row = document.createElement("tr");
     row.innerHTML = `
-      <td>${escapeHtml(preset.name || "-")}</td>
-      <td>${Number(preset.base_layer || 1)}</td>
+      <td><input data-field="name" value="${escapeAttribute(preset.name || "")}"></td>
+      <td><input data-field="base_layer" type="number" min="1" value="${Number(preset.base_layer || 1)}"></td>
+      <td><input data-field="max_chars_per_line" type="number" min="1" max="80" value="${Number(preset.subtitle_rule?.max_chars_per_line || 18)}"></td>
+      <td><input data-field="max_lines" type="number" min="1" max="4" value="${Number(preset.subtitle_rule?.max_lines || 2)}"></td>
+      <td><input data-field="min_duration_sec" type="number" min="0.1" step="0.1" value="${Number(preset.subtitle_rule?.min_duration_sec || 0.8)}"></td>
+      <td><input data-field="max_duration_sec" type="number" min="0.1" max="10" step="0.1" value="${Number(preset.subtitle_rule?.max_duration_sec || 4.0)}"></td>
       <td>${escapeHtml(preset.template_exo?.name || "-")}</td>
       <td>${escapeHtml(formatDateTime(preset.updated_at || ""))}</td>
+      <td class="row-actions"></td>
     `;
+    const actions = row.querySelector(".row-actions");
+    actions.appendChild(makeRowButton("適用", () => applyPresetRow(preset.preset_id)));
+    actions.appendChild(makeRowButton("保存", () => void savePresetRow(row, preset.preset_id)));
+    actions.appendChild(makeRowButton("削除", () => void deletePresetRow(preset.preset_id), "ghost danger"));
     presetTableBody.appendChild(row);
+  }
+}
+
+function makeRowButton(label, handler, className = "ghost") {
+  const button = document.createElement("button");
+  button.type = "button";
+  button.className = className;
+  button.textContent = label;
+  button.addEventListener("click", handler);
+  return button;
+}
+
+function applyPresetRow(presetId) {
+  if (!state.activeSpeakerCard) {
+    presetStatus.textContent = "先に適用先の話者を選択してください。";
+    return;
+  }
+  const preset = state.presets.find((item) => item.preset_id === presetId);
+  if (!preset) return;
+  applyPresetToCard(state.activeSpeakerCard, preset);
+  presetStatus.textContent = `適用しました: ${preset.name}`;
+}
+
+async function savePresetRow(row, presetId) {
+  try {
+    const preset = state.presets.find((item) => item.preset_id === presetId);
+    if (!preset) return;
+    const payload = {
+      preset_id: presetId,
+      name: row.querySelector('[data-field="name"]').value.trim() || "preset",
+      base_layer: Number(row.querySelector('[data-field="base_layer"]').value || 1),
+      subtitle_rule: {
+        max_chars_per_line: Number(row.querySelector('[data-field="max_chars_per_line"]').value || 18),
+        max_lines: Number(row.querySelector('[data-field="max_lines"]').value || 2),
+        min_duration_sec: Number(row.querySelector('[data-field="min_duration_sec"]').value || 0.8),
+        max_duration_sec: Number(row.querySelector('[data-field="max_duration_sec"]').value || 4.0),
+      },
+      template_exo: preset.template_exo,
+    };
+    await fetchJson("/api/v2/presets", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    });
+    await loadPresets(false);
+    presetStatus.textContent = `保存しました: ${payload.name}`;
+  } catch (error) {
+    presetStatus.textContent = formatError(error, "プリセット保存に失敗しました。");
+  }
+}
+
+async function deletePresetRow(presetId) {
+  try {
+    await fetchJson("/api/v2/presets/delete", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ preset_id: presetId }),
+    });
+    for (const card of speakerList.querySelectorAll(".speaker-card")) {
+      if (card.dataset.presetId !== presetId) continue;
+      card.dataset.presetId = "";
+      card.querySelector('[name="preset_select"]').value = "";
+      card._storedTemplateFile = null;
+      card._templatePreviewMeta = null;
+      refreshCardStatus(card, "削除済みプリセットを解除");
+    }
+    await loadPresets(false);
+    presetStatus.textContent = "プリセットを削除しました。";
+  } catch (error) {
+    presetStatus.textContent = formatError(error, "プリセット削除に失敗しました。");
   }
 }
 
@@ -443,6 +576,14 @@ async function fileToBase64(file) {
   return btoa(binary);
 }
 
+async function serializeFile(file) {
+  return {
+    name: file.name,
+    mime_type: file.type || "application/octet-stream",
+    content_b64: await fileToBase64(file),
+  };
+}
+
 function base64ToBytes(contentB64) {
   const binary = atob(contentB64);
   const bytes = new Uint8Array(binary.length);
@@ -466,6 +607,10 @@ function escapeHtml(value) {
     .replaceAll(">", "&gt;")
     .replaceAll('"', "&quot;")
     .replaceAll("'", "&#39;");
+}
+
+function escapeAttribute(value) {
+  return escapeHtml(value);
 }
 
 function formatError(error, fallbackMessage) {

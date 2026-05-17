@@ -1,110 +1,76 @@
-# AI字幕EXO生成ツール
+# srt2subtitle
 
-話者ごとに分離済みの音声ファイルとサンプル `.exo` を登録し、AviUtl 向けの字幕 `.exo` `.srt` `.json` を生成するローカル Web アプリです。
+音声/動画からSRTを作り、話者別EXOテンプレートへ流し込んでAviUtl用EXOを生成するローカルWebツールです。
 
-## 現状
+## 現行ルート
 
-- フロントエンド: プロジェクト作成、話者登録、字幕確認、本文修正、各形式出力
-- バックエンド: プロジェクト保存、テンプレート EXO 抽出、字幕分割、フレーム化、EXO/SRT/JSON 生成
-- 音声認識: Python 3.12 + `openai-whisper` の自動文字起こし、または認識済み JSON の読み込みに対応
+- `/studio`: 音声/動画、話者設定、プリセット、EXO出力を1画面で扱う統合画面
+- `/transcriber`: 音声/動画からSRT/JSONを生成するローカル文字起こし画面
+- `/v2`: SRTと見本EXOからEXOを生成する変換画面
 
-## sidecar JSON 形式
-
-音声認識エンジン未接続のため、現時点では以下形式の JSON を話者登録時に一緒に渡すか、各音声ファイルの横に置くと文字起こし入力として使えます。
-
-```json
-[
-  {
-    "start_sec": 0.0,
-    "end_sec": 2.4,
-    "text": "これはテストです。",
-    "confidence": 0.98
-  }
-]
-```
-
-候補ファイル名:
-
-- `sample.wav.segments.json`
-- `sample.segments.json`
-- `sample.json`
-
-UI では話者ごとに `認識JSON` を指定できます。今回の `sample.json` はここにそのまま使えます。
-
-## 自動文字起こし
-
-- バックエンド本体は Python 3.14 で動作可能
-- 自動文字起こしは `py -3.12` と `.deps312` 内の `openai-whisper` を使って別プロセス実行
-- Whisper モデルはローカルキャッシュが無ければ取得が必要
-- この環境では、UI 経由の初回自動ダウンロードは安定しないことがある
-- その場合は、先に以下のように 1 回だけ事前取得してから UI を使う
-
-```bash
-py -3.12 backend\asr_worker.py --audio "20260515テスト用.wav" --model base --language ja
-```
-
-- 同じ音声ファイルを同じ認識モードで再実行した場合は、アップロード済み音声の横にあるキャッシュ JSON を再利用する
-- 認識モードは `最速=tiny`, `高速=base`, `標準=small`, `高精度=medium`
+`/` は `/studio` と同じ統合画面を表示します。
 
 ## 起動
 
-```bash
-python -m backend.main
+```powershell
+python -m backend.main --port 8002
 ```
 
-ブラウザで `http://127.0.0.1:8000` を開きます。
-
-## ディレクトリ
+ブラウザで以下を開きます。
 
 ```text
-frontend/
-  index.html
-  app.js
-  style.css
-backend/
-  main.py
-  transcribe.py
-  subtitle_splitter.py
-  exo_parser.py
-  exo_writer.py
-  project_store.py
-  validators.py
-data/
-  projects/
+http://127.0.0.1:8002/
 ```
 
-## v0.2 draft path
+## Whisper セットアップ
 
-- alpha route: `http://127.0.0.1:8000/`
-- integrated studio route: `http://127.0.0.1:8000/studio`
-- v0.2 route: `http://127.0.0.1:8000/v2`
-- local transcriber route: `http://127.0.0.1:8000/transcriber`
-
-`/studio` is the one-screen local path. Set speakers, presets, and audio/video files, then run one action to transcribe, convert, and download the generated `.exo`.
-
-`/v2` is the new SRT based conversion path. It does not run speech recognition.
-Provide one `.srt` and one template `.exo` for each speaker, then export merged `.exo`, `.srt`, and `.json`.
-
-`/transcriber` is the local speech-to-SRT path. It accepts audio/video files, runs local Whisper through the Python worker, and exports one `.srt` plus one `.segments.json` per input file. Use the generated `.srt` files as `/v2` speaker inputs.
-
-If Whisper is not installed for Python 3.12, run:
+Python 3.12 側にWhisperが無い場合は以下を実行します。
 
 ```powershell
 powershell -ExecutionPolicy Bypass -File tools\setup_local_transcriber.ps1
 ```
 
-### v2 local project bundle
+確認だけ行う場合:
 
-In `/v2`, you can save the current project as one `.project.json` file.
-This bundle includes:
+```powershell
+powershell -ExecutionPolicy Bypass -File tools\check_local_transcriber.ps1
+```
 
-- project settings
-- per-speaker subtitle rules
-- per-speaker SRT
-- per-speaker template EXO
+## ベータ配布パッケージ作成
 
-You can load the saved `.project.json` later and run the conversion again without reselecting the source files.
+身内配布用のZIPと自己解凍PowerShellを作る場合は以下を実行します。
 
-### v2 sample files
+```powershell
+powershell -ExecutionPolicy Bypass -File tools\build_beta_package.ps1 -Version beta-0.2
+```
 
-Sample SRT files for `/v2` are under [`samples/`](C:\Users\kinok\OneDrive\ドキュメント\プログラミング_code\字幕生成\samples).
+生成物は `dist/` に出力されます。
+
+- `srt2subtitle-*.zip`: ZIP配布用。展開後に `起動.bat` を押す
+- `srt2subtitle-*自己解凍.bat`: 1ファイル配布用。押すと展開フォルダが開く
+
+受け取った側は `起動.bat` を実行します。
+音声認識も使う場合のみ、初回に `音声認識_初回セットアップ.bat` を実行します。
+
+## 基本手順
+
+1. `/studio` を開く
+2. 話者ごとに音声/動画を指定する
+3. 話者プリセットを選ぶ、または見本EXOを指定する
+4. `EXO自動保存` を押す
+5. 生成されたEXOをAviUtlへ読み込む
+
+手元でSRTを修正したい場合は、`/transcriber` でSRTだけ作成し、修正後に `/v2` へ渡します。
+
+## データ保存
+
+- `data/v2/`: ローカルプリセットとプロジェクト保存
+- `data/transcriber_cache/`: 音声認識キャッシュ
+- `.tmp/`: 一時ファイル
+
+これらはGit管理対象外です。
+
+## 仕様
+
+詳細仕様は `docs/versions/v0.2/` を参照してください。
+旧alpha資料は `docs/versions/v0.1-alpha/` と `docs/references/original_spec_v0.1.md` に残していますが、現行実装の主系列ではありません。
